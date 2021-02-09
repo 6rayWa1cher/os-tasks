@@ -38,16 +38,16 @@ public class Profiler {
     public <T> T constructProfiler(T obj, boolean print) {
         Class<T> tClass = (Class<T>) obj.getClass();
         Map<Method, ProfilingResults> profilingResultsMap = new HashMap<>();
-        T proxy = (T) Proxy.newProxyInstance(obj.getClass().getClassLoader(), tClass.getInterfaces(),
+        T proxy = (T) Proxy.newProxyInstance(tClass.getClassLoader(), tClass.getInterfaces(),
                 (proxy1, method, args) -> {
                     Method realMethod = obj.getClass().getMethod(method.getName(), method.getParameterTypes());
                     if (realMethod.isAnnotationPresent(Profile.class) || profilingResultsMap.containsKey(realMethod)) {
-                        long start = NANOSECOND ? System.nanoTime() : System.currentTimeMillis();
-                        Object output = realMethod.invoke(obj, args);
-                        long end = NANOSECOND ? System.nanoTime() : System.currentTimeMillis();
-                        long delta = end - start;
                         ProfilingResults profilingResults =
                                 profilingResultsMap.computeIfAbsent(realMethod, m -> new ProfilingResults(m, print, NANOSECOND));
+                        long start = profilingResults.isNano() ? System.nanoTime() : System.currentTimeMillis();
+                        Object output = realMethod.invoke(obj, args);
+                        long end = profilingResults.isNano() ? System.nanoTime() : System.currentTimeMillis();
+                        long delta = end - start;
                         profilingResults.processInvocation(delta);
                         return output;
                     } else {
@@ -66,6 +66,8 @@ public class Profiler {
         private final Method method;
         private boolean print;
         private long lastInvocationTime = -1;
+        private long totalInvocations = 0;
+        private long totalInvocationsTime = 0;
         private boolean isNano;
 
         public ProfilingResults(Method method, boolean print, boolean isNano) {
@@ -80,6 +82,8 @@ public class Profiler {
 
         protected void processInvocation(long time) {
             lastInvocationTime = time;
+            totalInvocationsTime += time;
+            totalInvocations++;
             if (print) {
                 System.out.println(method.getName() + ": " + getLastInvocationTimeString());
             }

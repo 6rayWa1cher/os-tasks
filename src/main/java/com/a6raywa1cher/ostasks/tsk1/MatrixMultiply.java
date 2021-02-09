@@ -3,13 +3,14 @@ package com.a6raywa1cher.ostasks.tsk1;
 import lombok.SneakyThrows;
 
 import java.util.*;
-import java.util.stream.Collectors;
+
+import static com.a6raywa1cher.ostasks.tsk1.Matrix.genMatrix;
 
 interface MultiplyMatrices {
-    double[][] dot(double[][] a, double[][] b);
+    Matrix dot(Matrix a, Matrix b);
 
-    default void assertMatrixSizes(double[][] a, double[][] b) throws IllegalArgumentException {
-        if (a[0].length != b.length) throw new IllegalArgumentException("inconsistent matrices");
+    default void assertMatrixSizes(Matrix a, Matrix b) throws IllegalArgumentException {
+        if (a.getCols() != b.getRows()) throw new IllegalArgumentException("inconsistent matrices");
     }
 
     default double multiply(double[][] a, double[][] b, int rowToMult, int colToMult) {
@@ -26,17 +27,19 @@ class MultiplySequential implements MultiplyMatrices {
     @Override
     @SneakyThrows
     @Profile
-    public double[][] dot(double[][] a, double[][] b) {
+    public Matrix dot(Matrix a, Matrix b) {
         assertMatrixSizes(a, b);
-        final int rows = a.length;
-        final int cols = b[0].length;
-        double[][] out = new double[rows][cols];
+        final int cols = b.getCols();
+        final int rows = a.getRows();
+        double[][] out = new double[cols][rows];
+        double[][] aMat = a.getMat();
+        double[][] bMat = b.getMat();
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                out[i][j] = multiply(a, b, i, j);
+                out[i][j] = multiply(aMat, bMat, i, j);
             }
         }
-        return out;
+        return new Matrix(out);
     }
 }
 
@@ -49,12 +52,14 @@ class MultiplyThreading implements MultiplyMatrices {
 
     @Override
     @Profile
-    public double[][] dot(double[][] a, double[][] b) {
+    public Matrix dot(Matrix a, Matrix b) {
         assertMatrixSizes(a, b);
-        final int rows = a.length;
-        final int cols = b[0].length;
+        final int cols = b.getCols();
+        final int rows = a.getRows();
         final int cells = rows * cols;
         double[][] out = new double[rows][cols];
+        double[][] aMat = a.getMat();
+        double[][] bMat = b.getMat();
 
         int cellsPerThread = cells / threads;
 
@@ -63,14 +68,20 @@ class MultiplyThreading implements MultiplyMatrices {
         for (int t = 0; t < threads; t++) {
             boolean isLast = t == threads - 1;
             int cellsToCalc = isLast ? cells - cellsPerThread * (threads - 1) : cellsPerThread;
-            int posFrom = t * cellsToCalc;
+            int posFrom = t * cellsPerThread;
             int fromI = posFrom / cols;
             int fromJ = posFrom % cols;
+            int posTo = posFrom + cellsToCalc;
+
             Runnable runnable = () -> {
-//                System.out.println(Thread.currentThread().getName() + ": " + posFrom + "-" + (posFrom + cellsToCalc));
-                for (int i = fromI; i < rows; i++) {
-                    for (int j = i == 0 ? fromJ : 0; j < cols; j++) {
-                        out[i][j] = multiply(a, b, i, j);
+//                System.out.println(Thread.currentThread().getName() + " " + fromI + " " + fromJ + " " + toI + " " + toJ);
+                int i = fromI;
+                int j = fromJ;
+                while (i * cols + j != posTo) {
+                    out[i][j] = multiply(aMat, bMat, i, j);
+                    if (++j >= cols) {
+                        i++;
+                        j = 0;
                     }
                 }
             };
@@ -87,53 +98,41 @@ class MultiplyThreading implements MultiplyMatrices {
             }
         });
 
-        return out;
+        return new Matrix(out);
     }
 }
 
 public class MatrixMultiply {
-    private static double[][] genMatrix(int rows, int cols) {
-        double[][] out = new double[rows][cols];
-        Random random = new Random();
-        for (int i = 0; i < rows; i++) {
-            for (int j = 0; j < cols; j++) {
-                out[i][j] = random.nextDouble();
-            }
-        }
-        return out;
-    }
-
-    private static String matrixToString(double[][] mat) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < mat.length; i++) {
-            sb.append(
-                    Arrays.stream(mat[i])
-                            .mapToObj(Double::toString)
-                            .collect(Collectors.joining(" "))
-            );
-            if (i != mat.length - 1) {
-                sb.append("\n");
-            }
-        }
-        return sb.toString();
-    }
-
     public static void main(String[] args) {
-        double[][] a = genMatrix(100, 100);
-        double[][] b = genMatrix(100, 100);
-        int threads = 2;
+        Matrix a = genMatrix(150, 100);
+        Matrix b = genMatrix(100, 150);
+        int threads = 3;
         Profiler profiler = Profiler.getInstance();
         Map<String, MultiplyMatrices> methods = new LinkedHashMap<>();
         methods.put("multiplySequential", new MultiplySequential());
         methods.put("multiplyThreading", new MultiplyThreading(threads));
         methods.replaceAll((s, mm) -> profiler.constructProfiler(mm));
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 500; i++) {
+            System.out.println("Test #" + (i + 1));
+            List<Matrix> outputs = new ArrayList<>(methods.size());
             for (var method : methods.entrySet()) {
                 MultiplyMatrices mm = method.getValue();
-                mm.dot(a, b);
+                outputs.add(mm.dot(a, b));
                 Profiler.ProfilingResults results = profiler.getProfilingResults(mm, "dot");
-                System.out.println(method.getKey() + ": " + results.getLastInvocationTimeString());
+//                System.out.println(method.getKey() + ":\t" + results.getLastInvocationTimeString());
             }
+            System.out.println(
+                    outputs.stream().allMatch(m -> outputs.get(0).equals(m)) ?
+                        "All contents equals" :
+                        "Mismatch!"
+            );
+        }
+        System.out.println("RESULTS");
+        for (var method : methods.entrySet()) {
+            MultiplyMatrices mm = method.getValue();
+            Profiler.ProfilingResults results = profiler.getProfilingResults(mm, "dot");
+            System.out.println(method.getKey() + ":\t" +
+                "AVG=" + results.getTotalInvocationsTime() / results.getTotalInvocations());
         }
     }
 }
