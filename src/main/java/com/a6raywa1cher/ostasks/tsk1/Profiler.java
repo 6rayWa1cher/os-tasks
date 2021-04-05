@@ -9,10 +9,14 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class Profiler {
-    private static final boolean NANOSECOND = true;
+    private static final boolean NANOSECOND = false;
     private static final Profiler instance = new Profiler();
     private final Map<Object, Map<Method, ProfilingResults>> map = new HashMap<>();
     private final Map<Object, Object> proxyToReal = new HashMap<>();
+
+    private Profiler() {
+
+    }
 
     public static Profiler getInstance() {
         return instance;
@@ -76,8 +80,20 @@ public class Profiler {
             this.isNano = isNano;
         }
 
+        private String getSuffix() {
+            return isNano ? "ns" : "ms";
+        }
+
         public String getLastInvocationTimeString() {
-            return lastInvocationTime + (isNano ? "ns" : "ms");
+            return lastInvocationTime + getSuffix();
+        }
+
+        public long getAvgInvocationTime() {
+            return totalInvocationsTime / totalInvocations;
+        }
+
+        public String getAvgInvocationTimeString() {
+            return getAvgInvocationTime() + getSuffix();
         }
 
         protected void processInvocation(long time) {

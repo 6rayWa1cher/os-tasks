@@ -3,6 +3,7 @@ package com.a6raywa1cher.ostasks.tsk1;
 import lombok.SneakyThrows;
 
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
 
 import static com.a6raywa1cher.ostasks.tsk1.Matrix.genMatrix;
 
@@ -51,6 +52,7 @@ class MultiplyThreading implements MultiplyMatrices {
     }
 
     @Override
+    @SneakyThrows
     @Profile
     public Matrix dot(Matrix a, Matrix b) {
         assertMatrixSizes(a, b);
@@ -67,6 +69,8 @@ class MultiplyThreading implements MultiplyMatrices {
 
         List<Thread> threadList = new ArrayList<>(threads);
 
+        CountDownLatch latch = new CountDownLatch(threads);
+
         for (int t = 0; t < threads; t++) {
             boolean isLast = t == threads - 1;
             int cellsToCalc = isLast ? cells - cellsPerThread * (threads - 1) : cellsPerThread;
@@ -76,7 +80,6 @@ class MultiplyThreading implements MultiplyMatrices {
             int posTo = posFrom + cellsToCalc;
 
             Runnable runnable = () -> {
-//                System.out.println(Thread.currentThread().getName() + " " + fromI + " " + fromJ + " " + toI + " " + toJ);
                 int i = fromI;
                 int j = fromJ;
                 while (i * cols + j != posTo) {
@@ -86,19 +89,14 @@ class MultiplyThreading implements MultiplyMatrices {
                         j = 0;
                     }
                 }
+                latch.countDown();
             };
             threadList.add(new Thread(runnable, "MMT" + t));
         }
 
         threadList.forEach(Thread::start);
 
-        threadList.forEach(thread -> {
-            try {
-                thread.join();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        });
+        latch.await();
 
         return new Matrix(out);
     }
@@ -114,7 +112,7 @@ public class MatrixMultiply {
         methods.put("multiplySequential", new MultiplySequential());
         methods.put("multiplyThreading", new MultiplyThreading(threads));
         methods.replaceAll((s, mm) -> profiler.constructProfiler(mm));
-        for (int i = 0; i < 500; i++) {
+        for (int i = 0; i < 5; i++) {
             System.out.println("Test #" + (i + 1));
             List<Matrix> outputs = new ArrayList<>(methods.size());
             for (var method : methods.entrySet()) {
