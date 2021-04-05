@@ -61,6 +61,8 @@ class MultiplyThreading implements MultiplyMatrices {
         double[][] aMat = a.getMat();
         double[][] bMat = b.getMat();
 
+        int threads = Math.min(rows*cols, this.threads);
+
         int cellsPerThread = cells / threads;
 
         List<Thread> threadList = new ArrayList<>(threads);
@@ -106,7 +108,7 @@ public class MatrixMultiply {
     public static void main(String[] args) {
         Matrix a = genMatrix(150, 100);
         Matrix b = genMatrix(100, 150);
-        int threads = 3;
+        int threads = 4;
         Profiler profiler = Profiler.getInstance();
         Map<String, MultiplyMatrices> methods = new LinkedHashMap<>();
         methods.put("multiplySequential", new MultiplySequential());
@@ -119,7 +121,7 @@ public class MatrixMultiply {
                 MultiplyMatrices mm = method.getValue();
                 outputs.add(mm.dot(a, b));
                 Profiler.ProfilingResults results = profiler.getProfilingResults(mm, "dot");
-//                System.out.println(method.getKey() + ":\t" + results.getLastInvocationTimeString());
+                System.out.println(method.getKey() + ":\t" + results.getLastInvocationTimeString());
             }
             System.out.println(
                     outputs.stream().allMatch(m -> outputs.get(0).equals(m)) ?
